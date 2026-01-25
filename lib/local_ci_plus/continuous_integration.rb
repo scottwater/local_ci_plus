@@ -8,7 +8,8 @@
 
 require "tempfile"
 
-class ContinuousIntegration
+module LocalCiPlus
+  class ContinuousIntegration
   COLORS = {
     banner: "\033[1;32m",   # Green
     title: "\033[1;35m",    # Purple
@@ -431,4 +432,5 @@ class ContinuousIntegration
 
     "#{COLORS.fetch(type)}#{text}\033[0m"
   end
+end
 end

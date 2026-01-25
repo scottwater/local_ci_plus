@@ -6,6 +6,7 @@ rescue LoadError
 end
 
 require_relative "local_ci_plus/continuous_integration"
+require_relative "local_ci_plus/railtie" if defined?(Rails::Railtie)
 require_relative "local_ci_plus/version"
 
 module LocalCiPlus

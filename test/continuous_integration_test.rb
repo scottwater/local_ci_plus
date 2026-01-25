@@ -8,7 +8,7 @@ class ContinuousIntegrationTest < Minitest::Test
     with_argv("--parallel", "--fail-fast") do
       _stdout, _stderr = capture_io do
         error = assert_raises(SystemExit) do
-          ContinuousIntegration.new.validate_mode_compatibility!
+          LocalCiPlus::ContinuousIntegration.new.validate_mode_compatibility!
         end
 
         assert_match(/Cannot combine --parallel with --fail-fast/, error.message)
@@ -20,7 +20,7 @@ class ContinuousIntegrationTest < Minitest::Test
     with_argv("--parallel", "--continue") do
       _stdout, _stderr = capture_io do
         error = assert_raises(SystemExit) do
-          ContinuousIntegration.new.validate_mode_compatibility!
+          LocalCiPlus::ContinuousIntegration.new.validate_mode_compatibility!
         end
 
         assert_match(/Cannot combine --parallel with --continue/, error.message)
@@ -31,7 +31,7 @@ class ContinuousIntegrationTest < Minitest::Test
   def test_plain_mode_enabled_by_flag
     with_argv("--plain") do
       with_stdout_tty(true) do
-        assert ContinuousIntegration.new.plain?
+        assert LocalCiPlus::ContinuousIntegration.new.plain?
       end
     end
   end
@@ -39,7 +39,7 @@ class ContinuousIntegrationTest < Minitest::Test
   def test_plain_mode_enabled_when_not_tty
     with_argv do
       with_stdout_tty(false) do
-        assert ContinuousIntegration.new.plain?
+        assert LocalCiPlus::ContinuousIntegration.new.plain?
       end
     end
   end
@@ -47,7 +47,7 @@ class ContinuousIntegrationTest < Minitest::Test
   def test_plain_mode_disabled_when_tty_and_no_flag
     with_argv do
       with_stdout_tty(true) do
-        refute ContinuousIntegration.new.plain?
+        refute LocalCiPlus::ContinuousIntegration.new.plain?
       end
     end
   end
