@@ -3,6 +3,8 @@
 local_ci_plus improves Rails local CI for both developers and agents with parallel execution, fail-fast,
 resume, and plain output.
 
+https://github.com/user-attachments/assets/cf8d8c01-ddee-4154-bdb3-0a77cb5c1f53
+
 ## Installation
 
 Add to your Gemfile:
