@@ -26,7 +26,7 @@ class UpdateGeneratorTest < Rails::Generators::TestCase
     run_generator
 
     assert_file "bin/ci", /require "local_ci_plus"/
-    assert_equal 1, File.read(destination_root + "/bin/ci").scan(/require "local_ci_plus"/).size
+    assert_equal 1, File.read(destination_root + "/bin/ci").scan('require "local_ci_plus"').size
   end
 
   def test_update_is_idempotent
@@ -41,7 +41,7 @@ class UpdateGeneratorTest < Rails::Generators::TestCase
 
     run_generator
 
-    assert_equal 1, File.read(destination_root + "/bin/ci").scan(/require "local_ci_plus"/).size
+    assert_equal 1, File.read(destination_root + "/bin/ci").scan('require "local_ci_plus"').size
   end
 
   private
