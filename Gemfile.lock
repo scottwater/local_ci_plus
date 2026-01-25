@@ -1,0 +1,27 @@
+PATH
+  remote: .
+  specs:
+    local_ci_plus (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    minitest (6.0.1)
+      prism (~> 1.5)
+    prism (1.8.0)
+
+PLATFORMS
+  arm64-darwin-24
+  ruby
+
+DEPENDENCIES
+  local_ci_plus!
+  minitest
+
+CHECKSUMS
+  local_ci_plus (0.1.0)
+  minitest (6.0.1)
+  prism (1.8.0)
+
+BUNDLED WITH
+  4.0.3
