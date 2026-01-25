@@ -11,9 +11,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Ruby
+      - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
+          ruby-version: .tool-versions
           bundler-cache: true
 
       - name: Run StandardRB
