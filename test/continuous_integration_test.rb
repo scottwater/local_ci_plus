@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "tempfile"
 require "tmpdir"
 require "local_ci_plus"
 
@@ -175,6 +176,90 @@ class ContinuousIntegrationTest < Minitest::Test
     end
   end
 
+  def test_plain_mode_summary_output_is_ascii
+    with_temp_dir do
+      with_argv("--plain") do
+        with_stdout_tty(true) do
+          outer = LocalCiPlus::ContinuousIntegration.new
+          inner = LocalCiPlus::ContinuousIntegration.new
+          inner.define_singleton_method(:system) { |*_args| true }
+
+          output = nil
+          with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+            output, _stderr = capture_io do
+              outer.report("CI") do
+                step("Step A", "cmd_a")
+              end
+            end
+          end
+
+          assert_ascii_only(output)
+        end
+      end
+    end
+  end
+
+  def test_plain_mode_failure_list_output_is_ascii
+    with_temp_dir do
+      with_argv("--plain") do
+        with_stdout_tty(true) do
+          outer = LocalCiPlus::ContinuousIntegration.new
+          inner = LocalCiPlus::ContinuousIntegration.new
+          call_count = 0
+          inner.define_singleton_method(:system) do |*_args|
+            call_count += 1
+            call_count != 1
+          end
+
+          output = nil
+          with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+            output, _stderr = capture_io do
+              outer.report("CI") do
+                step("Step A", "cmd_a")
+                step("Step B", "cmd_b")
+              end
+            end
+          end
+
+          assert_ascii_only(output)
+          assert_match(/-> Step A failed/, output)
+        end
+      end
+    end
+  end
+
+  def test_plain_mode_parallel_summary_output_is_ascii
+    with_temp_dir do
+      with_argv("--plain") do
+        with_stdout_tty(true) do
+          ci = LocalCiPlus::ContinuousIntegration.new
+
+          stdout_file = Tempfile.new("ci_stdout")
+          stderr_file = Tempfile.new("ci_stderr")
+          stdout_file.write("hello\n")
+          stderr_file.write("oops\n")
+          stdout_file.rewind
+          stderr_file.rewind
+
+          job = {
+            success: false,
+            title: "Parallel step",
+            exit_code: 1,
+            command: ["cmd", "arg"],
+            stdout_file: stdout_file,
+            stderr_file: stderr_file
+          }
+
+          output, _stderr = capture_io do
+            ci.send(:print_parallel_summary, [job])
+          end
+
+          assert_ascii_only(output)
+        end
+      end
+    end
+  end
+
   def test_plain_mode_enabled_by_flag
     with_argv("--plain") do
       with_stdout_tty(true) do
@@ -250,5 +335,9 @@ class ContinuousIntegrationTest < Minitest::Test
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) { yield dir }
     end
+  end
+
+  def assert_ascii_only(text)
+    assert text.ascii_only?, "Expected ASCII-only output, got: #{text.inspect}"
   end
 end

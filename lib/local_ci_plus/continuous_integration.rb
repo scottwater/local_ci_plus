@@ -49,10 +49,10 @@ module LocalCiPlus
 
     def validate_mode_compatibility!
       if parallel? && fail_fast?
-        abort colorize("❌ Cannot combine --parallel with --fail-fast", :error)
+        abort colorize("#{status_marker(:error)} Cannot combine --parallel with --fail-fast", :error)
       end
       if parallel? && continue_mode?
-        abort colorize("❌ Cannot combine --parallel with --continue", :error)
+        abort colorize("#{status_marker(:error)} Cannot combine --parallel with --continue", :error)
       end
     end
 
@@ -105,7 +105,7 @@ module LocalCiPlus
         else
           record_failed_step(title)
           if fail_fast?
-            abort colorize("\n❌ #{title} failed (fail-fast enabled)", :error)
+            abort colorize("\n#{status_marker(:error)} #{title} failed (fail-fast enabled)", :error)
           end
         end
       end
@@ -143,11 +143,11 @@ module LocalCiPlus
 
       prev_int = Signal.trap("INT") {
         ci.interrupt_parallel! if ci.parallel?
-        abort colorize("\n❌ #{title} interrupted", :error)
+        abort colorize("\n#{status_marker(:error)} #{title} interrupted", :error)
       }
       prev_term = Signal.trap("TERM") {
         ci.interrupt_parallel! if ci.parallel?
-        abort colorize("\n❌ #{title} terminated", :error)
+        abort colorize("\n#{status_marker(:error)} #{title} terminated", :error)
       }
 
       elapsed = timing do
@@ -159,14 +159,14 @@ module LocalCiPlus
       @skipping = ci.instance_variable_get(:@skipping)
 
       if ci.success?
-        echo "\n✅ #{title} passed in #{elapsed}", type: :success
+        echo "\n#{status_marker(:success)} #{title} passed in #{elapsed}", type: :success
         clear_state
       else
-        echo "\n❌ #{title} failed in #{elapsed}", type: :error
+        echo "\n#{status_marker(:error)} #{title} failed in #{elapsed}", type: :error
 
         if ci.multiple_results?
           ci.failures.each do |success, step_title|
-            echo "   ↳ #{step_title} failed", type: :error
+            echo "   #{failure_bullet} #{step_title} failed", type: :error
           end
         end
       end
@@ -219,7 +219,7 @@ module LocalCiPlus
       completed = []
       completed_by_index = {}
 
-      echo "\n⏳ Running #{total} steps in parallel:", type: :subtitle
+      echo "\n#{status_marker(:pending)} Running #{total} steps in parallel:", type: :subtitle
       unless plain?
         @parallel_steps.each do |step|
           echo format_parallel_line(step[:title], :pending), type: :pending
@@ -342,6 +342,41 @@ module LocalCiPlus
       failed_jobs = completed.reject { |j| j[:success] }
       return if failed_jobs.empty?
 
+      if plain?
+        separator = "-" * 60
+        echo "\n#{separator}", type: :error
+        echo "Failed step output:", type: :error
+        echo separator, type: :error
+
+        failed_jobs.each do |job|
+          echo "\n-- #{job[:title]} (exit #{job[:exit_code]})", type: :error
+          echo "   Command: #{job[:command].join(" ")}", type: :subtitle
+
+          stdout_content = truncated_file_content(job[:stdout_file])
+          stderr_content = truncated_file_content(job[:stderr_file])
+
+          if stdout_content.empty? && stderr_content.empty?
+            echo "   (no output)", type: :subtitle
+          else
+            unless stdout_content.empty?
+              echo "   -- stdout --", type: :subtitle
+              stdout_content.each_line { |line| echo "   #{line.chomp}", type: :subtitle }
+            end
+
+            unless stderr_content.empty?
+              echo "   -- stderr --", type: :error
+              stderr_content.each_line { |line| echo "   #{line.chomp}", type: :error }
+            end
+          end
+
+          echo "-- end", type: :error
+
+          cleanup_job_files!(job)
+        end
+
+        return
+      end
+
       echo "\n" + ("─" * 60), type: :error
       echo "Failed step output:", type: :error
       echo ("─" * 60), type: :error
@@ -395,8 +430,22 @@ module LocalCiPlus
       {pending: "•", success: "✅", error: "❌"}[status]
     end
 
+    def status_marker(type)
+      return {pending: "WAIT", success: "OK", error: "FAIL"}[type] if plain?
+
+      {pending: "⏳", success: "✅", error: "❌"}[type]
+    end
+
+    def failure_bullet
+      plain? ? "->" : "↳"
+    end
+
     def update_parallel_line(index, text, type)
-      return echo(text, type: type) if plain?
+      if plain?
+        echo(text, type: type)
+        $stdout.flush
+        return
+      end
 
       lines_up = @parallel_steps.size - index
       print "\033[s"
@@ -404,6 +453,7 @@ module LocalCiPlus
       print "\r\033[2K"
       print colorize(text, type)
       print "\033[u"
+      $stdout.flush
     end
 
     def state_file_path

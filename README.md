@@ -22,7 +22,7 @@ bundle install
 ## Usage
 
 `local_ci_plus` overrides `ActiveSupport::ContinuousIntegration` when it is loaded, so the default Rails `bin/ci`
-continues to work without changes.
+continues to work without changes. In plain/non-TTY mode, output is ASCII-only.
 
 ```bash
 bin/ci
