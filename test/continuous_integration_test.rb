@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "fileutils"
 require "tempfile"
 require "tmpdir"
 require "local_ci_plus"
@@ -86,7 +87,7 @@ class ContinuousIntegrationTest < Minitest::Test
           end
         end
 
-        assert_equal "First", File.read(".ci_state").strip
+        assert_equal "First", File.read("tmp/ci_state").strip
       end
     end
   end
@@ -106,7 +107,7 @@ class ContinuousIntegrationTest < Minitest::Test
           end
         end
 
-        assert_equal "First", File.read(".ci_state").strip
+        assert_equal "First", File.read("tmp/ci_state").strip
 
         outer = LocalCiPlus::ContinuousIntegration.new
         inner = LocalCiPlus::ContinuousIntegration.new
@@ -120,14 +121,15 @@ class ContinuousIntegrationTest < Minitest::Test
           end
         end
 
-        assert_equal "First", File.read(".ci_state").strip
+        assert_equal "First", File.read("tmp/ci_state").strip
       end
     end
   end
 
   def test_successful_run_clears_state
     with_temp_dir do
-      File.write(".ci_state", "Failing step")
+      FileUtils.mkdir_p("tmp")
+      File.write("tmp/ci_state", "Failing step")
 
       with_argv do
         outer = LocalCiPlus::ContinuousIntegration.new
@@ -143,13 +145,14 @@ class ContinuousIntegrationTest < Minitest::Test
         end
       end
 
-      refute File.exist?(".ci_state")
+      refute File.exist?("tmp/ci_state")
     end
   end
 
   def test_continue_skips_until_recorded_step_and_runs_it
     with_temp_dir do
-      File.write(".ci_state", "Step B")
+      FileUtils.mkdir_p("tmp")
+      File.write("tmp/ci_state", "Step B")
       executed = []
 
       with_argv("--continue") do
@@ -172,7 +175,7 @@ class ContinuousIntegrationTest < Minitest::Test
       end
 
       assert_equal ["cmd_b", "cmd_c"], executed
-      refute File.exist?(".ci_state")
+      refute File.exist?("tmp/ci_state")
     end
   end
 
@@ -264,7 +267,7 @@ class ContinuousIntegrationTest < Minitest::Test
     with_temp_dir do
       Dir.mkdir("tmp")
 
-      with_env("CI_STATE_FILE" => "tmp/ci_state") do
+      with_env("CI_STATE_FILE" => "custom/ci_state") do
         with_argv do
           outer = LocalCiPlus::ContinuousIntegration.new
           inner = LocalCiPlus::ContinuousIntegration.new
@@ -280,8 +283,8 @@ class ContinuousIntegrationTest < Minitest::Test
         end
       end
 
-      assert File.exist?("tmp/ci_state"), "Expected custom state file to be created"
-      refute File.exist?(".ci_state")
+      assert File.exist?("custom/ci_state"), "Expected custom state file to be created"
+      refute File.exist?("tmp/ci_state")
     end
   end
 

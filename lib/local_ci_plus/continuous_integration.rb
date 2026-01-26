@@ -6,6 +6,7 @@
 # - bin/ci -fc: Both options combined
 # - bin/ci -p (--parallel): Run all steps concurrently
 
+require "fileutils"
 require "tempfile"
 
 module LocalCiPlus
@@ -20,7 +21,7 @@ module LocalCiPlus
       pending: "\033[1;34m"   # Blue
     }
 
-    STATE_FILE = ".ci_state"
+    STATE_FILE = File.join("tmp", "ci_state")
     STATE_FILE_ENV = "CI_STATE_FILE"
 
     attr_reader :results
@@ -465,6 +466,7 @@ module LocalCiPlus
     end
 
     def save_failed_step(title)
+      FileUtils.mkdir_p(File.dirname(state_file_path))
       File.write(state_file_path, title)
     end
 
