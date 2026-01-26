@@ -347,7 +347,7 @@ class ContinuousIntegrationTest < Minitest::Test
     yield
   ensure
     originals.each do |key, value|
-      value == :__undefined__ ? ENV.delete(key) : ENV[key] = value
+      (value == :__undefined__) ? ENV.delete(key) : ENV[key] = value
     end
   end
 

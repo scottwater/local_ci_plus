@@ -56,7 +56,7 @@ class UpdateGeneratorTest < Rails::Generators::TestCase
     run_generator
 
     contents = File.read(destination_root + "/bin/ci")
-    assert_match(/require_relative\s+\"..\/config\/boot\".*\nrequire "local_ci_plus"/, contents)
+    assert_match(/require_relative\s+"..\/config\/boot".*\nrequire "local_ci_plus"/, contents)
   end
 
   def test_update_is_idempotent
