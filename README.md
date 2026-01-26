@@ -81,6 +81,12 @@ Run linting:
 bundle exec standardrb
 ```
 
+Or run them both:
+
+```base
+bin/ci --parallel
+```
+
 ### Publishing Updates
 
 1. Bump the version in `lib/local_ci_plus/version.rb`.
