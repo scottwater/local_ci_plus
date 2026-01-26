@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "tmpdir"
 require "local_ci_plus"
 
 class ContinuousIntegrationTest < Minitest::Test
@@ -60,6 +61,117 @@ class ContinuousIntegrationTest < Minitest::Test
         capture_io { handlers.fetch("TERM").call }
       end
       assert_equal 2, interrupt_calls
+    end
+  end
+
+  def test_records_first_failure_without_fail_fast
+    with_temp_dir do
+      with_argv do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        call_count = 0
+
+        inner.define_singleton_method(:system) do |*_args|
+          call_count += 1
+          call_count != 1
+        end
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("First", "cmd1")
+              step("Second", "cmd2")
+            end
+          end
+        end
+
+        assert_equal "First", File.read(".ci_state").strip
+      end
+    end
+  end
+
+  def test_repeated_failures_keep_original_failed_step
+    with_temp_dir do
+      with_argv do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        inner.define_singleton_method(:system) { |*_args| false }
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("First", "cmd1")
+            end
+          end
+        end
+
+        assert_equal "First", File.read(".ci_state").strip
+
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        inner.define_singleton_method(:system) { |*_args| false }
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("Second", "cmd2")
+            end
+          end
+        end
+
+        assert_equal "First", File.read(".ci_state").strip
+      end
+    end
+  end
+
+  def test_successful_run_clears_state
+    with_temp_dir do
+      File.write(".ci_state", "Failing step")
+
+      with_argv do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        inner.define_singleton_method(:system) { |*_args| true }
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("Failing step", "cmd")
+            end
+          end
+        end
+      end
+
+      refute File.exist?(".ci_state")
+    end
+  end
+
+  def test_continue_skips_until_recorded_step_and_runs_it
+    with_temp_dir do
+      File.write(".ci_state", "Step B")
+      executed = []
+
+      with_argv("--continue") do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        inner.define_singleton_method(:system) do |*args|
+          executed << args.join(" ")
+          true
+        end
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("Step A", "cmd_a")
+              step("Step B", "cmd_b")
+              step("Step C", "cmd_c")
+            end
+          end
+        end
+      end
+
+      assert_equal ["cmd_b", "cmd_c"], executed
+      refute File.exist?(".ci_state")
     end
   end
 
@@ -132,5 +244,11 @@ class ContinuousIntegrationTest < Minitest::Test
     yield
   ensure
     klass.singleton_class.define_method(method_name, original)
+  end
+
+  def with_temp_dir
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) { yield dir }
+    end
   end
 end

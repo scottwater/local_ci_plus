@@ -83,7 +83,6 @@ module LocalCiPlus
       if @skipping
         if title == @skip_until
           @skipping = false
-          clear_state
         else
           heading title, "skipped (resuming from: #{@skip_until})", type: :skip
           results << [true, title]
@@ -101,9 +100,13 @@ module LocalCiPlus
         success = system(*command)
         results << [success, title]
 
-        if !success && fail_fast?
-          save_failed_step(title)
-          abort colorize("\n❌ #{title} failed (fail-fast enabled)", :error)
+        if success
+          clear_state if recorded_failed_step == title
+        else
+          record_failed_step(title)
+          if fail_fast?
+            abort colorize("\n❌ #{title} failed (fail-fast enabled)", :error)
+          end
         end
       end
     end
@@ -411,9 +414,21 @@ module LocalCiPlus
       File.write(state_file_path, title)
     end
 
-    def load_failed_step
+    def record_failed_step(title)
+      return if recorded_failed_step
+
+      save_failed_step(title)
+    end
+
+    def recorded_failed_step
       return nil unless File.exist?(state_file_path)
-      File.read(state_file_path).strip
+
+      content = File.read(state_file_path).strip
+      content.empty? ? nil : content
+    end
+
+    def load_failed_step
+      recorded_failed_step
     end
 
     def clear_state
