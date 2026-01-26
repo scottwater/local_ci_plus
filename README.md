@@ -96,3 +96,9 @@ bin/ci --parallel
 gem build local_ci_plus.gemspec
 gem push local_ci_plus-X.Y.Z.gem
 ```
+
+## Prior Work
+
+This  project is based off of ActiveSupport::ContinuousIntegration. 
+
+Many thanks to the Rails team for shipping the original work.
