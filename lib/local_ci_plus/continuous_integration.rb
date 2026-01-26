@@ -21,6 +21,7 @@ module LocalCiPlus
     }
 
     STATE_FILE = ".ci_state"
+    STATE_FILE_ENV = "CI_STATE_FILE"
 
     attr_reader :results
 
@@ -457,6 +458,9 @@ module LocalCiPlus
     end
 
     def state_file_path
+      custom_path = ENV[STATE_FILE_ENV]
+      return File.expand_path(custom_path, Dir.pwd) if custom_path && !custom_path.empty?
+
       File.join(Dir.pwd, STATE_FILE)
     end
 

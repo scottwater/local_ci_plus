@@ -260,6 +260,31 @@ class ContinuousIntegrationTest < Minitest::Test
     end
   end
 
+  def test_state_file_path_can_be_overridden
+    with_temp_dir do
+      Dir.mkdir("tmp")
+
+      with_env("CI_STATE_FILE" => "tmp/ci_state") do
+        with_argv do
+          outer = LocalCiPlus::ContinuousIntegration.new
+          inner = LocalCiPlus::ContinuousIntegration.new
+          inner.define_singleton_method(:system) { |*_args| false }
+
+          with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+            capture_io do
+              outer.report("CI") do
+                step("Failing step", "cmd")
+              end
+            end
+          end
+        end
+      end
+
+      assert File.exist?("tmp/ci_state"), "Expected custom state file to be created"
+      refute File.exist?(".ci_state")
+    end
+  end
+
   def test_plain_mode_enabled_by_flag
     with_argv("--plain") do
       with_stdout_tty(true) do

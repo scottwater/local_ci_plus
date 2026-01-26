@@ -63,6 +63,10 @@ Compatibility:
   --parallel cannot be combined with --fail-fast or --continue
 ```
 
+### State file
+
+By default, the first failing step is stored in `.ci_state` at the repo root. Set `CI_STATE_FILE` to override the path (for example, `tmp/ci_state`). To reset the resume point, delete the file.
+
 ## Development
 
 Run tests:
