@@ -28,6 +28,41 @@ class ContinuousIntegrationTest < Minitest::Test
     end
   end
 
+  def test_interrupt_parallel_called_on_int_and_term_in_parallel_mode
+    with_argv("--parallel") do
+      outer = LocalCiPlus::ContinuousIntegration.new
+      inner = LocalCiPlus::ContinuousIntegration.new
+      interrupt_calls = 0
+
+      inner.define_singleton_method(:interrupt_parallel!) do
+        interrupt_calls += 1
+      end
+
+      handlers = {}
+      signal_stub = lambda do |signal, handler = nil, &block|
+        handler = block if block
+        handlers[signal] = handler if handler.is_a?(Proc)
+        "DEFAULT"
+      end
+
+      with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+        with_stubbed_singleton_method(Signal, :trap, signal_stub) do
+          outer.report("CI") {}
+        end
+      end
+
+      assert_raises(SystemExit) do
+        capture_io { handlers.fetch("INT").call }
+      end
+      assert_equal 1, interrupt_calls
+
+      assert_raises(SystemExit) do
+        capture_io { handlers.fetch("TERM").call }
+      end
+      assert_equal 2, interrupt_calls
+    end
+  end
+
   def test_plain_mode_enabled_by_flag
     with_argv("--plain") do
       with_stdout_tty(true) do
@@ -45,9 +80,11 @@ class ContinuousIntegrationTest < Minitest::Test
   end
 
   def test_plain_mode_disabled_when_tty_and_no_flag
-    with_argv do
-      with_stdout_tty(true) do
-        refute LocalCiPlus::ContinuousIntegration.new.plain?
+    with_env("TERM" => "xterm-256color", "NO_COLOR" => nil, "CI_PLAIN" => nil) do
+      with_argv do
+        with_stdout_tty(true) do
+          refute LocalCiPlus::ContinuousIntegration.new.plain?
+        end
       end
     end
   end
@@ -70,5 +107,30 @@ class ContinuousIntegrationTest < Minitest::Test
     yield
   ensure
     $stdout = original_stdout
+  end
+
+  def with_env(values)
+    originals = {}
+    values.each_key do |key|
+      originals[key] = ENV.key?(key) ? ENV[key] : :__undefined__
+    end
+
+    values.each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+
+    yield
+  ensure
+    originals.each do |key, value|
+      value == :__undefined__ ? ENV.delete(key) : ENV[key] = value
+    end
+  end
+
+  def with_stubbed_singleton_method(klass, method_name, replacement)
+    original = klass.method(method_name)
+    klass.define_singleton_method(method_name, replacement)
+    yield
+  ensure
+    klass.singleton_class.define_method(method_name, original)
   end
 end

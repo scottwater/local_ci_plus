@@ -134,18 +134,18 @@ module LocalCiPlus
     end
 
     def report(title, &block)
-      prev_int = Signal.trap("INT") {
-        interrupt_parallel! if parallel?
-        abort colorize("\n❌ #{title} interrupted", :error)
-      }
-      prev_term = Signal.trap("TERM") {
-        interrupt_parallel! if parallel?
-        abort colorize("\n❌ #{title} terminated", :error)
-      }
-
       ci = self.class.new
       ci.instance_variable_set(:@skip_until, @skip_until)
       ci.instance_variable_set(:@skipping, @skipping)
+
+      prev_int = Signal.trap("INT") {
+        ci.interrupt_parallel! if ci.parallel?
+        abort colorize("\n❌ #{title} interrupted", :error)
+      }
+      prev_term = Signal.trap("TERM") {
+        ci.interrupt_parallel! if ci.parallel?
+        abort colorize("\n❌ #{title} terminated", :error)
+      }
 
       elapsed = timing do
         ci.instance_eval(&block)
