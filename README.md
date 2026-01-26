@@ -81,35 +81,7 @@ Run linting:
 bundle exec standardrb
 ```
 
-## Publishing
-
-### One-time setup (RubyGems)
-
-1. Create a RubyGems account if you do not have one.
-2. Add your API key:
-
-```bash
-mkdir -p ~/.gem
-printf "---\n:rubygems_api_key: YOUR_KEY\n" > ~/.gem/credentials
-chmod 0600 ~/.gem/credentials
-```
-
-### Initial release
-
-1. Update `local_ci_plus.gemspec` with the real `authors`, `email`, `homepage`, and `license`.
-2. Build the gem:
-
-```bash
-gem build local_ci_plus.gemspec
-```
-
-3. Push to RubyGems:
-
-```bash
-gem push local_ci_plus-0.1.0.gem
-```
-
-### Updates
+### Publishing Updates
 
 1. Bump the version in `lib/local_ci_plus/version.rb`.
 2. Build and push:
