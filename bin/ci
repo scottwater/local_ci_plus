@@ -7,5 +7,5 @@ require "local_ci_plus"
 CI = LocalCiPlus::ContinuousIntegration
 CI.run do
   step "Linting", "bundle exec standardrb"
-  step "Tests", "bundle exec ruby -Itest test/continuous_integration_test.rb"
+  step "Tests", "bundle exec ruby -Itest test/all_tests.rb"
 end
