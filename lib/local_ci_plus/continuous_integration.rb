@@ -4,7 +4,7 @@
 # - bin/ci -f (--fail-fast): Stop immediately when a step fails
 # - bin/ci -c (--continue): Resume from the last failed step
 # - bin/ci -fc: Both options combined
-# - bin/ci -p (--parallel): Run all steps concurrently
+# - bin/ci -i (--inline): Run steps sequentially (default is parallel)
 
 require "fileutils"
 require "tempfile"
@@ -50,12 +50,7 @@ module LocalCiPlus
     end
 
     def validate_mode_compatibility!
-      if parallel? && fail_fast?
-        abort colorize("#{status_marker(:error)} Cannot combine --parallel with --fail-fast", :error)
-      end
-      if parallel? && continue_mode?
-        abort colorize("#{status_marker(:error)} Cannot combine --parallel with --continue", :error)
-      end
+      # No incompatible combinations now that fail-fast/continue auto-disable parallel
     end
 
     def help?
@@ -66,16 +61,15 @@ module LocalCiPlus
       $stdout.puts <<~HELP
         Usage: bin/ci [options]
 
+        Runs all CI steps in parallel by default.
+
         Options:
-          -f, --fail-fast   Stop immediately when a step fails
-          -c, --continue    Resume from the last failed step
+          -f, --fail-fast   Stop immediately when a step fails (runs inline)
+          -c, --continue    Resume from the last failed step (runs inline)
           -fc, -cf          Combine fail-fast and continue
-          -p, --parallel    Run all steps concurrently
+          -i, --inline      Run steps sequentially instead of parallel
           --plain           Disable ANSI cursor updates/colors (also used for non-TTY)
           -h, --help        Show this help
-
-        Compatibility:
-          --parallel cannot be combined with --fail-fast or --continue
       HELP
     end
 
@@ -198,7 +192,10 @@ module LocalCiPlus
     end
 
     def parallel?
-      ARGV.include?("-p") || ARGV.include?("--parallel")
+      return false if ARGV.include?("-i") || ARGV.include?("--inline")
+      return false if fail_fast? || continue_mode?
+
+      true
     end
 
     def plain?

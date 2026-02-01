@@ -7,32 +7,38 @@ require "tmpdir"
 require "local_ci_plus"
 
 class ContinuousIntegrationTest < Minitest::Test
-  def test_parallel_incompatible_with_fail_fast
-    with_argv("--parallel", "--fail-fast") do
-      _stdout, _stderr = capture_io do
-        error = assert_raises(SystemExit) do
-          LocalCiPlus::ContinuousIntegration.new.validate_mode_compatibility!
-        end
-
-        assert_match(/Cannot combine --parallel with --fail-fast/, error.message)
-      end
+  def test_fail_fast_disables_parallel
+    with_argv("--fail-fast") do
+      ci = LocalCiPlus::ContinuousIntegration.new
+      refute ci.parallel?
+      assert ci.fail_fast?
     end
   end
 
-  def test_parallel_incompatible_with_continue
-    with_argv("--parallel", "--continue") do
-      _stdout, _stderr = capture_io do
-        error = assert_raises(SystemExit) do
-          LocalCiPlus::ContinuousIntegration.new.validate_mode_compatibility!
-        end
+  def test_continue_disables_parallel
+    with_argv("--continue") do
+      ci = LocalCiPlus::ContinuousIntegration.new
+      refute ci.parallel?
+      assert ci.continue_mode?
+    end
+  end
 
-        assert_match(/Cannot combine --parallel with --continue/, error.message)
-      end
+  def test_parallel_is_default
+    with_argv do
+      ci = LocalCiPlus::ContinuousIntegration.new
+      assert ci.parallel?
+    end
+  end
+
+  def test_inline_disables_parallel
+    with_argv("--inline") do
+      ci = LocalCiPlus::ContinuousIntegration.new
+      refute ci.parallel?
     end
   end
 
   def test_interrupt_parallel_called_on_int_and_term_in_parallel_mode
-    with_argv("--parallel") do
+    with_argv do
       outer = LocalCiPlus::ContinuousIntegration.new
       inner = LocalCiPlus::ContinuousIntegration.new
       interrupt_calls = 0
@@ -68,7 +74,7 @@ class ContinuousIntegrationTest < Minitest::Test
 
   def test_records_first_failure_without_fail_fast
     with_temp_dir do
-      with_argv do
+      with_argv("--inline") do
         outer = LocalCiPlus::ContinuousIntegration.new
         inner = LocalCiPlus::ContinuousIntegration.new
         call_count = 0
@@ -94,7 +100,7 @@ class ContinuousIntegrationTest < Minitest::Test
 
   def test_repeated_failures_keep_original_failed_step
     with_temp_dir do
-      with_argv do
+      with_argv("--inline") do
         outer = LocalCiPlus::ContinuousIntegration.new
         inner = LocalCiPlus::ContinuousIntegration.new
         inner.define_singleton_method(:system) { |*_args| false }
@@ -131,7 +137,7 @@ class ContinuousIntegrationTest < Minitest::Test
       FileUtils.mkdir_p("tmp")
       File.write("tmp/ci_state", "Failing step")
 
-      with_argv do
+      with_argv("--inline") do
         outer = LocalCiPlus::ContinuousIntegration.new
         inner = LocalCiPlus::ContinuousIntegration.new
         inner.define_singleton_method(:system) { |*_args| true }
@@ -181,7 +187,7 @@ class ContinuousIntegrationTest < Minitest::Test
 
   def test_plain_mode_summary_output_is_ascii
     with_temp_dir do
-      with_argv("--plain") do
+      with_argv("--plain", "--inline") do
         with_stdout_tty(true) do
           outer = LocalCiPlus::ContinuousIntegration.new
           inner = LocalCiPlus::ContinuousIntegration.new
@@ -204,7 +210,7 @@ class ContinuousIntegrationTest < Minitest::Test
 
   def test_plain_mode_failure_list_output_is_ascii
     with_temp_dir do
-      with_argv("--plain") do
+      with_argv("--plain", "--inline") do
         with_stdout_tty(true) do
           outer = LocalCiPlus::ContinuousIntegration.new
           inner = LocalCiPlus::ContinuousIntegration.new
@@ -268,7 +274,7 @@ class ContinuousIntegrationTest < Minitest::Test
       Dir.mkdir("tmp")
 
       with_env("CI_STATE_FILE" => "custom/ci_state") do
-        with_argv do
+        with_argv("--inline") do
           outer = LocalCiPlus::ContinuousIntegration.new
           inner = LocalCiPlus::ContinuousIntegration.new
           inner.define_singleton_method(:system) { |*_args| false }

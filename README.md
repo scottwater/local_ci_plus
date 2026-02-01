@@ -51,16 +51,15 @@ require_relative "../config/ci"
 
 ### Options
 
+Runs all CI steps in parallel by default.
+
 ```
--f, --fail-fast   Stop immediately when a step fails
--c, --continue    Resume from the last failed step
+-f, --fail-fast   Stop immediately when a step fails (runs inline)
+-c, --continue    Resume from the last failed step (runs inline)
 -fc, -cf          Combine fail-fast and continue
--p, --parallel    Run all steps concurrently
+-i, --inline      Run steps sequentially instead of parallel
 --plain           Disable ANSI cursor updates/colors (also used for non-TTY)
 -h, --help        Show this help
-
-Compatibility:
-  --parallel cannot be combined with --fail-fast or --continue
 ```
 
 ### State file
@@ -83,8 +82,8 @@ bundle exec standardrb
 
 Or run them both:
 
-```base
-bin/ci --parallel
+```bash
+bin/ci
 ```
 
 ### Publishing Updates
