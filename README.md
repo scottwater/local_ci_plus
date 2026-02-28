@@ -28,6 +28,23 @@ continues to work without changes. In plain/non-TTY mode, output is ASCII-only.
 bin/ci
 ```
 
+Use `parallel_steps` when you want a parallel phase before sequential follow-up steps.
+If any step in `parallel_steps` fails, later steps are skipped and listed in the summary.
+If no `parallel_steps` block is present, all steps run in parallel (default behavior).
+
+```ruby
+CI.run do
+  parallel_steps do
+    step "Style: Ruby", "bin/standardrb"
+    step "JavaScript: lint", "npm run lint"
+    step "Security: Gem audit", "bin/bundler-audit"
+  end
+
+  step "Tests: Rails", "bin/rspec"
+  step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
+end
+```
+
 If your app does not already require the gem in `bin/ci`, run the installer generator:
 
 ```bash

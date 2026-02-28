@@ -30,6 +30,163 @@ class ContinuousIntegrationTest < Minitest::Test
     end
   end
 
+  def test_parallel_steps_success_runs_remaining_steps_inline
+    with_temp_dir do
+      with_argv do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        parallel_batches = []
+        executed = []
+
+        inner.define_singleton_method(:run_parallel_steps!) do |steps = @parallel_steps|
+          parallel_batches << steps.map { |step| step[:title] }
+          steps.each { |step| results << [true, step[:title]] }
+          []
+        end
+        inner.define_singleton_method(:system) do |*args|
+          executed << args.join(" ")
+          true
+        end
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              parallel_steps do
+                step("Step A", "cmd_a")
+                step("Step B", "cmd_b")
+              end
+              step("Step C", "cmd_c")
+            end
+          end
+        end
+
+        assert_equal [["Step A", "Step B"]], parallel_batches
+        assert_equal ["cmd_c"], executed
+      end
+    end
+  end
+
+  def test_parallel_steps_failure_skips_remaining_steps
+    with_temp_dir do
+      with_argv("--plain") do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        executed = []
+
+        inner.define_singleton_method(:run_parallel_steps!) do |steps = @parallel_steps|
+          steps.each_with_index do |step, idx|
+            results << [idx != 0, step[:title]]
+          end
+          [{success: false, title: steps.first[:title]}]
+        end
+        inner.define_singleton_method(:system) do |*args|
+          executed << args.join(" ")
+          true
+        end
+
+        output = nil
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          output, _stderr = capture_io do
+            outer.report("CI") do
+              parallel_steps do
+                step("Step A", "cmd_a")
+                step("Step B", "cmd_b")
+              end
+              step("Step C", "cmd_c")
+              step("Step D", "cmd_d")
+            end
+          end
+        end
+
+        assert_equal [], executed
+        assert_equal ["Step C", "Step D"], inner.skipped_steps
+        assert_match(/Step C skipped/, output)
+        assert_match(/Step D skipped/, output)
+      end
+    end
+  end
+
+  def test_parallel_steps_evaluates_block_after_prior_queued_failure
+    with_temp_dir do
+      with_argv("--plain") do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        parallel_batches = []
+        executed = []
+
+        inner.define_singleton_method(:run_parallel_steps!) do |steps = @parallel_steps|
+          parallel_batches << steps.map { |step| step[:title] }
+          steps.each_with_index do |step, idx|
+            results << [idx != 0, step[:title]]
+          end
+          return [] if steps.empty?
+
+          [{success: false, title: steps.first[:title]}]
+        end
+        inner.define_singleton_method(:system) do |*args|
+          executed << args.join(" ")
+          true
+        end
+
+        output = nil
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          output, _stderr = capture_io do
+            outer.report("CI") do
+              step("Step A", "cmd_a")
+              step("Step B", "cmd_b")
+
+              parallel_steps do
+                step("Step C", "cmd_c")
+                step("Step D", "cmd_d")
+              end
+
+              step("Step E", "cmd_e")
+            end
+          end
+        end
+
+        assert_equal [["Step A", "Step B"], []], parallel_batches
+        assert_equal [], executed
+        assert_equal ["Step C", "Step D", "Step E"], inner.skipped_steps
+        assert_match(/Step C skipped/, output)
+        assert_match(/Step D skipped/, output)
+      end
+    end
+  end
+
+  def test_without_parallel_steps_block_all_steps_stay_parallel
+    with_temp_dir do
+      with_argv do
+        outer = LocalCiPlus::ContinuousIntegration.new
+        inner = LocalCiPlus::ContinuousIntegration.new
+        parallel_batches = []
+        executed = []
+
+        inner.define_singleton_method(:run_parallel_steps!) do |steps = @parallel_steps|
+          parallel_batches << steps.map { |step| step[:title] }
+          steps.each { |step| results << [true, step[:title]] }
+          []
+        end
+        inner.define_singleton_method(:system) do |*args|
+          executed << args.join(" ")
+          true
+        end
+
+        with_stubbed_singleton_method(LocalCiPlus::ContinuousIntegration, :new, ->(*_args, &_block) { inner }) do
+          capture_io do
+            outer.report("CI") do
+              step("Step A", "cmd_a")
+              step("Step B", "cmd_b")
+            end
+          end
+        end
+
+        assert_equal [["Step A", "Step B"]], parallel_batches
+        assert_empty executed
+      end
+    end
+  end
+
   def test_inline_disables_parallel
     with_argv("--inline") do
       ci = LocalCiPlus::ContinuousIntegration.new

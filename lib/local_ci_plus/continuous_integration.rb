@@ -24,7 +24,7 @@ module LocalCiPlus
     STATE_FILE = File.join("tmp", "ci_state")
     STATE_FILE_ENV = "CI_STATE_FILE"
 
-    attr_reader :results
+    attr_reader :results, :skipped_steps
 
     def self.run(title = "Continuous Integration", subtitle = "Running tests, style checks, and security audits", &block)
       new.tap do |ci|
@@ -45,6 +45,11 @@ module LocalCiPlus
       @results = []
       @step_names = []
       @parallel_steps = []
+      @using_explicit_parallel_steps = false
+      @inside_parallel_steps_block = false
+      @skip_remaining_steps = false
+      @skip_remaining_reason = nil
+      @skipped_steps = []
       @skip_until = continue_mode? ? load_failed_step : nil
       @skipping = !!@skip_until
     end
@@ -80,31 +85,48 @@ module LocalCiPlus
         if title == @skip_until
           @skipping = false
         else
-          heading title, "skipped (resuming from: #{@skip_until})", type: :skip
-          results << [true, title]
+          mark_step_skipped(title, "resuming from: #{@skip_until}")
           return
         end
       end
 
-      if parallel?
+      if @skip_remaining_steps
+        mark_step_skipped(title, @skip_remaining_reason || "parallel steps failed")
+        return
+      end
+
+      if queue_parallel_step?
         @parallel_steps << {title: title, command: command}
         return
       end
 
-      heading title, command.join(" "), type: :title
-      report(title) do
-        success = system(*command)
-        results << [success, title]
+      run_inline_step(title, command)
+    end
 
-        if success
-          clear_state if recorded_failed_step == title
-        else
-          record_failed_step(title)
-          if fail_fast?
-            abort colorize("\n#{status_marker(:error)} #{title} failed (fail-fast enabled)", :error)
-          end
+    def parallel_steps(&block)
+      return unless block
+
+      @using_explicit_parallel_steps = true
+
+      if parallel?
+        if @parallel_steps.any?
+          completed = run_parallel_steps!(@parallel_steps)
+          @parallel_steps.clear
+          mark_remaining_steps_skipped!("parallel_steps failed") if completed.any? { |job| !job[:success] }
         end
+
+        @inside_parallel_steps_block = true
+        queue_start = @parallel_steps.length
+        instance_eval(&block)
+        batch = @parallel_steps.slice!(queue_start, @parallel_steps.length - queue_start) || []
+        completed = run_parallel_steps!(batch)
+        mark_remaining_steps_skipped!("parallel_steps failed") if completed.any? { |job| !job[:success] }
+      else
+        @inside_parallel_steps_block = true
+        instance_eval(&block)
       end
+    ensure
+      @inside_parallel_steps_block = false
     end
 
     def success?
@@ -148,7 +170,7 @@ module LocalCiPlus
 
       elapsed = timing do
         ci.instance_eval(&block)
-        ci.run_parallel_steps! if ci.parallel? && ci.parallel_steps.any?
+        ci.run_parallel_steps!(ci.queued_parallel_steps) if ci.parallel? && ci.queued_parallel_steps.any?
       end
 
       @skip_until = ci.instance_variable_get(:@skip_until)
@@ -163,6 +185,12 @@ module LocalCiPlus
         if ci.multiple_results?
           ci.failures.each do |success, step_title|
             echo "   #{failure_bullet} #{step_title} failed", type: :error
+          end
+        end
+
+        if ci.skipped_steps.any?
+          ci.skipped_steps.each do |step_title|
+            echo "   #{failure_bullet} #{step_title} skipped", type: :skip
           end
         end
       end
@@ -208,24 +236,29 @@ module LocalCiPlus
       false
     end
 
-    attr_reader :parallel_steps
+    def queued_parallel_steps
+      @parallel_steps
+    end
 
     MAX_OUTPUT_BYTES = 100 * 1024  # 100KB max per output stream
 
-    def run_parallel_steps!
-      total = @parallel_steps.size
+    def run_parallel_steps!(steps = @parallel_steps)
+      return [] if steps.empty?
+
+      total = steps.size
+      @active_parallel_size = total
       @running_jobs = []
       completed = []
       completed_by_index = {}
 
       echo "\n#{status_marker(:pending)} Running #{total} steps in parallel:", type: :subtitle
       unless plain?
-        @parallel_steps.each do |step|
+        steps.each do |step|
           echo format_parallel_line(step[:title], :pending), type: :pending
         end
       end
 
-      @parallel_steps.each_with_index do |step_info, idx|
+      steps.each_with_index do |step_info, idx|
         title = step_info[:title]
         command = step_info[:command]
 
@@ -277,7 +310,7 @@ module LocalCiPlus
       end
 
       if plain?
-        @parallel_steps.each_with_index do |step, idx|
+        steps.each_with_index do |step, idx|
           job = completed_by_index[idx]
           type = job[:success] ? :success : :error
           echo format_parallel_line(step[:title], type, duration: job[:duration]), type: type
@@ -285,7 +318,9 @@ module LocalCiPlus
       end
 
       print_parallel_summary(completed)
+      completed
     ensure
+      @active_parallel_size = nil
       cleanup_all_jobs!
     end
 
@@ -336,6 +371,42 @@ module LocalCiPlus
     end
 
     private
+
+    def run_inline_step(title, command)
+      heading title, command.join(" "), type: :title
+      report(title) do
+        success = system(*command)
+        results << [success, title]
+
+        if success
+          clear_state if recorded_failed_step == title
+        else
+          record_failed_step(title)
+          if fail_fast?
+            abort colorize("\n#{status_marker(:error)} #{title} failed (fail-fast enabled)", :error)
+          end
+        end
+      end
+    end
+
+    def mark_step_skipped(title, reason)
+      heading title, "skipped (#{reason})", type: :skip
+      @skipped_steps << title if reason == @skip_remaining_reason
+      results << [true, title]
+    end
+
+    def queue_parallel_step?
+      return false unless parallel?
+      return true if @inside_parallel_steps_block
+      return false if @using_explicit_parallel_steps
+
+      true
+    end
+
+    def mark_remaining_steps_skipped!(reason)
+      @skip_remaining_steps = true
+      @skip_remaining_reason = reason
+    end
 
     def print_parallel_summary(completed)
       failed_jobs = completed.reject { |j| j[:success] }
@@ -446,7 +517,7 @@ module LocalCiPlus
         return
       end
 
-      lines_up = @parallel_steps.size - index
+      lines_up = (@active_parallel_size || @parallel_steps.size) - index
       print "\033[s"
       print "\033[#{lines_up}A" if lines_up > 0
       print "\r\033[2K"
